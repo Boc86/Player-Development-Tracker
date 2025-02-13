@@ -12,6 +12,16 @@ class HomeApp(HydraHeadApp):
     
     def run(self):
         try:
-            st.markdown("<h1 style='text-align:center;padding: 0px 0px;color:black;font-size:200%;'>Home</h1>",unsafe_allow_html=True) 
-        except Exception as e:  
+            st.markdown("<h1 style='text-align:center; color:white;'>Welcome to KRFC Player Development Tracker</h1>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:left;'>Your central hub for managing player development and team performance.</p>", unsafe_allow_html=True)
+
+            st.write("### Key Features:")
+            st.write("- **Player Dashboards:** Track individual player stats and development scores.")
+            st.write("- **Team Management:** Organize and manage your teams effectively.")
+            st.write("- **Admin Panel:** Manage users and teams with ease.")
+
+            st.write("### Get Started:")
+            st.write("- Use the navigation menu on the left to explore the different sections of the app.")
+        except Exception as e:
+            st.error(f"Error in home app: {str(e)}")
             return None

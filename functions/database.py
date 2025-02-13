@@ -1,10 +1,13 @@
-import sqlite3
+import supabase
 import hydralit as hy
 import pandas as pd
-import hashlib
+
+supabase_url = hy.secrets["supabase_url"]
+supabase_key = hy.secrets["supabase_key"]
+supabase_client = supabase.create_client(supabase_url, supabase_key)
 
 def strip_name(data):
-    cleaned_names = [f"{name[0]} {name[1]}" for name in data]
+    cleaned_names = [f"{name['first_name']} {name['sur_name']}" for name in data]
     return cleaned_names
 
 class user:
@@ -64,206 +67,123 @@ class development_score:
         self.positional_awareness = positional_awareness
         self.confidence = confidence
 
-def create_db():
-    try:
-        conn = sqlite3.connect('player_tracker.db')
-        cursor = conn.cursor()
-        cursor.execute('PRAGMA foreign_keys = ON')
-        conn.commit()
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
-    finally:
-        if conn:
-            conn.close()
-
-def create_tables():
-    try:
-        conn = sqlite3.connect('player_tracker.db')
-        cursor = conn.cursor()
-
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            sur_name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            role_id INTEGER,
-            created_at DATE,
-            FOREIGN KEY (role_id) REFERENCES role(id)
-        )
-        ''')
-
-        password = "admin"
-        hashed_password = hashlib.sha256(password.encode()).hexdigest()
-        data = ("admin", "admin", "admin", hashed_password, 1)
-
-        cursor.execute("INSERT OR IGNORE INTO user (first_name, sur_name, email, password_hash, role_id) VALUES (?, ?, ?, ?, ?)", data)
-
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS role (
-            id INTEGER PRIMARY KEY,
-            role_name TEXT NOT NULL
-        )
-        ''')
-
-        data = [
-            (1, 'Admin'),
-            (2, 'Coach'),
-            (3, 'Player'),
-            (4, 'Director of Rugby'),
-            (5, 'New signup')
-        ]
-
-        cursor.executemany('INSERT OR IGNORE INTO role (id, role_name) VALUES (?, ?)', data)
-
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS player (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            sur_name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            team_id INTEGER,
-            position_id INTEGER,
-            FOREIGN KEY (team_id) REFERENCES team(id),
-            FOREIGN KEY (position_id) REFERENCES position(id)
-        )
-        ''')
-
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS position (
-            id INTEGER PRIMARY KEY,
-            position_name TEXT NOT NULL
-        )
-        ''')
-
-        data = [
-            (1, 'Loose Head Prop'),
-            (2, 'Hooker'),
-            (3, 'Titght Head Prop'),
-            (4, 'Second Row'),
-            (5, 'Second Row'),
-            (6, 'Blindside Flanker'),
-            (7, 'Openside Flanker'),
-            (8, 'Number 8'),
-            (9, 'Scrum Half'),
-            (10, 'Fly Half'),
-            (11, 'Left Wing'),
-            (12, 'Inside Centre'),
-            (13, 'Outside Centre'),
-            (14, 'Right Wing'),
-            (15, 'Full Back'),
-            (16, 'N/A'),
-        ]
-
-        cursor.executemany('INSERT OR IGNORE INTO position (id, position_name) VALUES (?, ?)', data)
-
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS team (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_name TEXT NOT NULL,
-            coach_id INTEGER,
-            assistant_coach1_id INTEGER,
-            assistant_coach2_id INTEGER,
-            assistant_coach3_id INTEGER,
-            assistant_coach4_id INTEGER,
-            assistant_coach5_id INTEGER,
-            director_of_rugby_id INTEGER,
-            FOREIGN KEY (coach_id) REFERENCES user(id),
-            FOREIGN KEY (assistant_coach1_id) REFERENCES user(id),
-            FOREIGN KEY (assistant_coach2_id) REFERENCES user(id),
-            FOREIGN KEY (assistant_coach3_id) REFERENCES user(id),
-            FOREIGN KEY (assistant_coach4_id) REFERENCES user(id),
-            FOREIGN KEY (assistant_coach5_id) REFERENCES user(id),
-            FOREIGN KEY (director_of_rugby_id) REFERENCES user(id)
-        )
-        ''')
-
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS development_score (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            player_id INTEGER,
-            comments TEXT,
-            passing INTEGER,
-            catching INTEGER,
-            tackling INTEGER,
-            kicking INTEGER,
-            rucking INTEGER,
-            scrummaging INTEGER,
-            attack INTEGER,
-            defence INTEGER,
-            positional_awareness INTEGER,
-            confidence INTEGER,
-            FOREIGN KEY (player_id) REFERENCES player(id)
-        )
-        ''')
-
-        conn.commit()
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
-    finally:
-        if conn:
-            conn.close()
-
 def save_changes(table, data):
-    conn = sqlite3.connect('player_tracker.db')
-    cursor = conn.cursor()
-
     if table == "user":
         try:
             df = pd.DataFrame(data)
+            print(df)
             for index, row in df.iterrows():
-                update_query = """UPDATE user
-                    SET first_name = ?, sur_name = ?, email = ?, password_hash = ?, role_id = ? 
-                    WHERE id = ?"""
-                cursor.execute(update_query, (row["first_name"], row["sur_name"], row["email"], row["password_hash"], row["role_id"], row["id"]))
+                supabase_client.table("user").update({
+                    "first_name": row["first_name"],
+                    "sur_name": row["sur_name"],
+                    "email": row["email"],
+                    "password_hash": row["password_hash"],
+                    "role_id": row["role_id"]
+                }).eq("id", row["id"]).execute()
                 
-            conn.commit()
-            conn.close()
             hy.success("Users updated successfully")
 
-        except sqlite3.Error as error:
-            conn.close
-            hy.error = error
+        except Exception as error:
+            hy.error(error)
     
     elif table == "team_add":
         try:
-
-
-
-
-            cursor.execute("""INSERT OR IGNORE INTO team (
-                            team_name, coach_id, assistant_coach1_id,
-                            assistant_coach2_id, assistant_coach3_id, 
-                            assistant_coach4_id, assistant_coach5_id, 
-                            director_of_rugby_id) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        data) #need to replace name in cleaned data with ID from user table
+            supabase_client.table("team").insert({
+                "team_name": data[0],
+                "coach_id": data[1],
+                "assistant_coach1_id": data[2],
+                "assistant_coach2_id": data[3],
+                "assistant_coach3_id": data[4],
+                "assistant_coach4_id": data[5],
+                "assistant_coach5_id": data[6],
+                "director_of_rugby_id": data[7]
+            }).execute()
             
-            conn.commit()
-            conn.close()
             hy.success("Team added successfully")
             hy.rerun()
         
-        except sqlite3.Error as error:
-            conn.close()
+        except Exception as error:
             hy.error(error)
     
     elif table == "team_save":
         try:
             db = pd.DataFrame(data)
             for index, row in db.iterrows():
-                update_query = """UPDATE team
-                    SET team_name = ?, coach_id = ?, assistant_coach1_id = ?, assistant_coach2_id = ?, assistant_coach3_id = ?, assistant_coach4_id = ?, assistant_coach5_id = ?, director_of_rugby_id = ?
-                    WHERE id = ?"""
-                cursor.execute(update_query, (row["team_name"], row["coach_id"], row["assistant_coach1_id"], row["assistant_coach2_id"], row["assistant_coach3_id"], row["assistant_coach4_id"], row["assistant_coach5_id"], row["director_of_rugby_id"], row["id"]))
+                supabase_client.table("team").update({
+                    "team_name": row["team_name"],
+                    "coach_id": row["coach_id"],
+                    "assistant_coach1_id": row["assistant_coach1_id"],
+                    "assistant_coach2_id": row["assistant_coach2_id"],
+                    "assistant_coach3_id": row["assistant_coach3_id"],
+                    "assistant_coach4_id": row["assistant_coach4_id"],
+                    "assistant_coach5_id": row["assistant_coach5_id"],
+                    "director_of_rugby_id": row["director_of_rugby_id"]
+                }).eq("id", row["id"]).execute()
                 
-            conn.commit()
-            conn.close()
-            hy.success("Teams updated successfully")
+            hy.success("Team updated successfully")
 
-        except sqlite3.Error as error:
-            conn.close()
+        except Exception as error:
+            hy.error(error)
+    
+    elif table == "add_player":
+        try:
+            supabase_client.table("player").insert({
+                "first_name": data[0],
+                "sur_name": data[1],
+                "email": data[2],
+                "team_id": data[3],
+                "position_id": data[4]
+            }).execute()
+
+            supabase_client.table("development_score").insert({
+                "player_id": supabase_client.table("player").select("id").eq("first_name", data[0]).eq("sur_name", data[1]).execute().data[0]["id"],
+                "passing": 0,
+                "catching": 0,
+                "tackling": 0,
+                "kicking": 0,
+                "rucking": 0,
+                "scrummaging": 0,
+                "attack": 0,
+                "defence": 0,
+                "positional_awareness": 0,
+                "confidence": 0
+            }).execute()
+
+            hy.success("Player added successfully")
+            hy.rerun()
+        
+        except Exception as error:
+            hy.error(error)
+        
+    if table == "save_player":
+        try:
+            db = pd.DataFrame(data)
+            for index, row in db.iterrows():
+                response = supabase_client.table("development_score").update({
+                    "passing": row["passing"],
+                    "catching": row["catching"],
+                    "tackling": row["tackling"],
+                    "kicking": row["kicking"],
+                    "rucking": row["rucking"],
+                    "scrummaging": row["scrummaging"],
+                    "attack": row["attack"],
+                    "defence": row["defence"],
+                    "positional_awareness": row["positional_awareness"],
+                    "confidence": row["confidence"],
+                    "comments": row["comments"]
+                }).eq("player_id", row["player_id"]).execute()
+            
+                position_id = supabase_client.table("position").select("id").eq("position_name", row["position_id"]).execute().data[0]["id"]
+                response = supabase_client.table("player").update({
+                    "first_name": row["first_name"],
+                    "sur_name": row["sur_name"],
+                    "email": row["email"],
+                    "position_id": position_id   
+                }).eq("id", row["player_id"]).execute()
+
+            hy.success("Player updated successfully")
+            hy.rerun()
+        
+        except Exception as error:
             hy.error(error)
 
-     

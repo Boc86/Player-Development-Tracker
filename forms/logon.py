@@ -1,15 +1,16 @@
 import hydralit as hy
-import sqlite3
+import supabase
 import hashlib
 import re
 from datetime import date
 
+supabase_url = hy.secrets["supabase_url"]
+supabase_key = hy.secrets["supabase_key"]
+supabase_client = supabase.create_client(supabase_url, supabase_key)
+
 def validate_username(username):
     """Check for duplicate username"""
-    conn = sqlite3.connect('player_tracker.db')
-    cursor = conn.cursor()
-    response = cursor.execute(f"SELECT COUNT(*) FROM user WHERE email = '{username}'").fetchone()
-
+    response = supabase_client.table("user").select("email").eq("email", username).execute()
     res = " " in username
 
     try:
@@ -17,7 +18,7 @@ def validate_username(username):
             hy.error("Username cannot contain spaces")
             return False
 
-        if not str(response.count) == "None":
+        if response.data:
             hy.error("Email already in use, please choose a different one")
             return False
     except Exception as e:
@@ -59,57 +60,51 @@ def validate_email(email):
 def check_login(username, password):
     """Check user credentials against Supabase."""
 
-    conn = sqlite3.connect('player_tracker.db')
-    cursor = conn.cursor()
-
     hashed_password = hash_password(password)
     
     try:
         # Fetch user from Supabase
-        response = cursor.execute(f"SELECT * FROM user WHERE email = '{username}'").fetchone()
+        response = supabase_client.table("user").select("*").eq("email", username).execute()
         
-        if response and len(response) > 0:
+        if response.data:
             # Compare hashed passwords
-            stored_user = response
-            return stored_user[4] == hashed_password  # Access password_hash using index 4
+            stored_user = response.data[0]
+            return stored_user["password_hash"] == hashed_password
     except Exception as e:
         hy.error(f"Login error: {e}")
         return False
 
 def register_user(email, first_name, sur_name, password):
-    conn = sqlite3.connect('player_tracker.db')
-    cursor = conn.cursor()
     role_id = 5
-    created_at = date.today()
 
     try:
         # Check if info already exists
-        existing_email = cursor.execute(f"SELECT * FROM user WHERE email = '{email}'").fetchone()
-        if existing_email and len(existing_email) > 0:
+        existing_email = supabase_client.table("user").select("*").eq("email", email).execute()
+        if existing_email.data:
             hy.error("Email already in use")
             return False
 
         # Hash the password
         hashed_password = hash_password(password)
         
-        cursor.execute(f"INSERT OR IGNORE INTO user (email, first_name, sur_name, password_hash, role_id, created_at) VALUES ('{email}', '{first_name}', '{sur_name}', '{hashed_password}', '{role_id}', '{created_at}')")
-        conn.commit()
+        supabase_client.table("user").insert({
+            "email": email,
+            "first_name": first_name,
+            "sur_name": sur_name,
+            "password_hash": hashed_password,
+            "role_id": role_id
+        }).execute()
         return True
     except Exception as e:
         hy.error(f"Registration error: {e}")
         return False
-    finally:
-        conn.close()
 
 def login_form():
-
-    conn = sqlite3.connect('player_tracker.db')
-    cursor = conn.cursor()
 
     with hy.form(key="Login"):
 
         """Streamlit login page."""
-        hy.title("👑 KRFC Player Development Tracker")
+        hy.title("KRFC Player Development Tracker")
         
         # Create tabs
         tab1, tab2 = hy.tabs(["Login", "Register"])
@@ -126,11 +121,11 @@ def login_form():
                     hy.session_state['logged_in'] = True
                     hy.session_state['email'] = login_email
 
-
-                    get_user_name = cursor.execute(f"SELECT first_name FROM user WHERE email = '{login_email}'").fetchone()
-                    get_role_id = cursor.execute(f"SELECT role_id FROM user WHERE email = '{login_email}'").fetchone()
-                    hy.session_state['first_name'] = str(get_user_name)
-                    hy.session_state['role'] = str(get_role_id)
+                    response = supabase_client.table("user").select("first_name, role_id, id").eq("email", login_email).execute()
+                    if response.data:
+                        hy.session_state['first_name'] = response.data[0]["first_name"]
+                        hy.session_state['role'] = str(response.data[0]["role_id"])
+                        hy.session_state['user_id'] = response.data[0]["id"]
 
                     hy.rerun()
                     

@@ -1,58 +1,62 @@
 import hydralit as hy
 from hydralit import HydraHeadApp
-import sqlite3
 import pandas as pd
 from functions.database import save_changes
 from forms.add_team import add_team_form
+import supabase
+import streamlit as st
 
-MENU_LAYOUT = [1,1,1,7,2]
+MENU_LAYOUT = [1, 1, 1, 7, 2]
+
 
 @hy.dialog("Add Team")
 def show_add_team_form():
     add_team_form()
 
+
 class AdminApp(HydraHeadApp):
 
-    def __init__(self, title = '', **kwargs):
+    def __init__(self, title='', **kwargs):
         self.__dict__.update(kwargs)
         self.title = title
-    
+        self.supabase_url = hy.secrets["supabase_url"]
+        self.supabase_key = hy.secrets["supabase_key"]
+        self.supabase_client = supabase.create_client(self.supabase_url, self.supabase_key)
+
     def run(self):
 
-        conn = sqlite3.connect('player_tracker.db')
-        cursor = conn.cursor()
-        
-        
-
-        with hy.expander("Users"):
+        with st.expander("User Management"):
             try:
-                hy.write("User Admin Panel")
-                users = cursor.execute(f"SELECT * FROM user").fetchall()
-                user_data = pd.DataFrame.from_records(users, columns=[i[0] for i in cursor.description])
-                df = hy.data_editor(user_data, hide_index=True, num_rows="dynamic")
+                st.markdown("<h2 style='text-align:left;'>User Admin Panel</h2>", unsafe_allow_html=True)
+                response = self.supabase_client.table("user").select("*").execute()
+                users = response.data
+                user_data = pd.DataFrame(users)
+                data = st.data_editor(user_data)
 
-                save = hy.button("Save")
+                save = st.button("Save User Changes", key="save_users")
                 if save:
-                    save_changes("user", df)
+                    save_changes("user", data)
 
-            except Exception as e:  
+            except Exception as e:
+                st.error(f"Error in user admin panel: {str(e)}")
                 return None
-        
-        with hy.expander("Teams"):
+
+        with st.expander("Team Management"):
             try:
-                hy.write("Team Admin Panel")
-                teams = cursor.execute(f"SELECT * FROM team").fetchall()
-                team_data = pd.DataFrame.from_records(teams, columns=[i[0] for i in cursor.description])
-                db = hy.data_editor(team_data, hide_index=True, num_rows="dynamic")
+                st.markdown("<h2 style='text-align:left;'>Team Admin Panel</h2>", unsafe_allow_html=True)
+                response = self.supabase_client.table("team").select("*").execute()
+                teams = response.data
+                team_data = pd.DataFrame(teams)
+                data = st.data_editor(team_data)
 
-                add = hy.button("Add Team")
-                if add:
-                    show_add_team_form()
-                
-                save = hy.button("Save Changes")
-                if save:
-                    save_changes("team_save", db)
-                
+                col1, col2, _, _ = st.columns([1, 1, 5, 5])
+                with col1:
+                    add = st.button("Add Team", on_click=show_add_team_form)
+                with col2:
+                    save = st.button("Save Team Changes", key="save_teams")
+                    if save:
+                        save_changes("team_save", data)
 
-            except Exception as e:  
+            except Exception as e:
+                st.error(f"Error in team admin panel: {str(e)}")
                 return None

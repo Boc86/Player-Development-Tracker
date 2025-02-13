@@ -1,7 +1,6 @@
 import hydralit as hy
 from hydralit import HydraApp
 import apps.home_app
-from functions.database import create_tables, create_db
 from forms.logon import login_form
 import apps
 
@@ -13,8 +12,6 @@ if 'role' not in hy.session_state:
 
 @hy.dialog("Login")
 def show_login_form() -> None:
-    create_db()
-    create_tables()
     login_form()
 
 if __name__ == '__main__':
@@ -44,14 +41,14 @@ if __name__ == '__main__':
         show_login_form()
     
     role = hy.session_state["role"]
-    if len(role) > 1 and role[1] == "1":
+    if len(role) == 1 and str(role[0]) == "1":
         complex_nav = {
             "Home": ["Home"],
             "Admin": ["Admin"],
             "Teams": ["Teams"],
             "Dashboard": ["Dashboard"]
         }
-    elif role[0] == "5":
+    elif str(role) == "5":
         complex_nav = {
             "Home": ["Home"]
         }
@@ -63,4 +60,3 @@ if __name__ == '__main__':
         }
 
     app.run(complex_nav)
-    
