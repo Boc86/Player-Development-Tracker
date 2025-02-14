@@ -127,6 +127,7 @@ def save_changes(table, data):
     
     elif table == "add_player":
         try:
+
             supabase_client.table("player").insert({
                 "first_name": data[0],
                 "sur_name": data[1],

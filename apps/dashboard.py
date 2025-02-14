@@ -1,9 +1,10 @@
 import hydralit as hy
 from hydralit import HydraHeadApp
-import pandas as pd
 import supabase
 from functions.radar_chart import radar_chart
-import streamlit as st
+from functions.insights import get_insights
+import pandas as pd
+import json
 
 MENU_LAYOUT = [1, 1, 1, 7, 2]
 
@@ -29,6 +30,9 @@ change_column_config = {
     "confidence": "Confidence"
 }
 
+@hy.dialog("Player Insights", width="large")
+def player_insights_dialog(data):
+    hy.markdown(data)
 
 def create_player_radar(hd):
     try:
@@ -61,7 +65,7 @@ def get_score_color(score):
 
 def display_player_card(title, value):
     """Display a card with colored score"""
-    st.markdown(
+    hy.markdown(
         f"""
         <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin: 5px;">
             <h4>{title}</h4>
@@ -83,7 +87,7 @@ class DashboardApp(HydraHeadApp):
 
     def run(self):
         try:
-            cole, colf, colg = st.columns([1, 1, 2])
+            cole, colf, colg = hy.columns([1, 1, 2])
             with cole:
 
                 current_user_id = hy.session_state["user_id"]
@@ -94,8 +98,9 @@ class DashboardApp(HydraHeadApp):
                     teams = self.supabase_client.table("team").select("*").or_(filter_string).execute()
                 
                 team_names = [team["team_name"] for team in teams.data]
+                team_names.sort()
 
-                selected_team_name = st.selectbox("Select Team", options=team_names, key="team_name",
+                selected_team_name = hy.selectbox("Select Team", options=team_names, key="team_name",
                                                     index=0 if team_names else None)
 
                 selected_team = next((team for team in teams.data if team["team_name"] == selected_team_name), None)
@@ -105,9 +110,10 @@ class DashboardApp(HydraHeadApp):
                     players = self.supabase_client.table("player").select("*").eq("team_id", selected_team["id"]).execute()
 
                     player_options = [f"{p['first_name']} {p['sur_name']}" for p in players.data]
+                    player_options.sort()
                     player_map = {f"{p['first_name']} {p['sur_name']}": p for p in players.data}
 
-                    selected_player_name = st.selectbox("Select Player", options=player_options, key="player_name",
+                    selected_player_name = hy.selectbox("Select Player", options=player_options, key="player_name",
                                                         index=0 if player_options else None)
 
                     if selected_player_name:
@@ -124,16 +130,54 @@ class DashboardApp(HydraHeadApp):
                             position = position_map.get(selected_player["position_id"], "Unknown")
                         
                         else:
-                            st.warning("No development scores found for this player")
+                            hy.warning("No development scores found for this player")
                     else:
-                        st.warning("No player selected")
+                        hy.warning("No player selected")
                 else:
-                    st.warning("No team selected")
+                    hy.warning("No team selected")
+            
+            with colg:
+                # Create base dataframe with player and score data
+                hd = pd.merge(pd.DataFrame(players.data), pd.DataFrame(player_scores.data), 
+                            left_on="id", right_on="player_id", suffixes=('_player', '_dev'))
+                
+                # Add position information
+                positions_df = pd.DataFrame(positions)
+                hd = pd.merge(hd, positions_df, left_on='position_id', right_on='id', 
+                            how='left', suffixes=('', '_position'))
+                
+                # Add team information
+                teams_df = pd.DataFrame(teams.data)
+                hd = pd.merge(hd, teams_df, left_on='team_id', right_on='id',
+                            how='left', suffixes=('', '_team'))
+                
+                generate_insights = hy.button("Generate Player Insights", key="generate_insights")
+                if generate_insights:
+                    # Filter and clean data for selected player
+                    player_data = hd[hd['first_name'] == selected_player['first_name']].copy()
+                    
+                    # Ensure position and team names are included
+                    filtered_data = {
+                        'player_name': f"{selected_player['first_name']} {selected_player['sur_name']}",
+                        'position': position,
+                        'team': selected_team_name,
+                        'scores': player_data[['passing', 'catching', 'tackling', 'kicking', 
+                                             'rucking', 'scrummaging', 'attack', 'defence',
+                                             'positional_awareness', 'confidence']].to_dict('records')[0],
+                        'comments': latest_score['comments']
+                    }
+                    
+                    insights = get_insights(json.dumps(filtered_data), "player")
+                    if insights:
+                        player_insights_dialog(insights)
+                            
+                    else:
+                        hy.error("Failed to generate player insights")
 
-            col1, col2 = st.columns([1, 2])
+            col1, col2 = hy.columns([1, 2])
 
             with col1:
-                st.markdown(f"""
+                hy.markdown(f"""
                 <div style="padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
                     <h3>Player Bio</h3>
                     <div style="display: flex;">
@@ -149,10 +193,10 @@ class DashboardApp(HydraHeadApp):
 
                 fig = create_player_radar(latest_score)
                 if fig is not None:
-                    st.plotly_chart(fig, use_container_width=True, theme="streamlit")
+                    hy.plotly_chart(fig, use_container_width=True, theme="streamlit")
 
             with col2:
-                score_cols = st.columns(2)
+                score_cols = hy.columns(2)
                 scores = [
                     ("Passing", latest_score["passing"]),
                     ("Catching", latest_score["catching"]),
@@ -171,5 +215,5 @@ class DashboardApp(HydraHeadApp):
                         display_player_card(title, value)
 
         except Exception as e:
-            st.error(f"Error in dashboard: {str(e)}")
+            hy.error(f"Error in dashboard: {str(e)}")
             return None

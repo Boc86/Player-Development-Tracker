@@ -2,11 +2,13 @@ import hydralit as hy
 from hydralit import HydraHeadApp
 import pandas as pd
 from functions.database import save_changes
+from functions.insights import get_insights
 from forms.add_player import add_player_form
 import supabase
 import statistics as stat
 from functions.radar_chart import radar_chart
 import streamlit as st
+import json
 
 MENU_LAYOUT = [1, 1, 1, 7, 2]
 
@@ -31,6 +33,10 @@ change_column_config = {
     "positional_awareness": "Positional Awareness",
     "confidence": "Confidence"
 }
+
+@hy.dialog("Team Insights", width="large")
+def team_insights_dialog(data):
+    hy.markdown(data)
 
 
 def create_team_radar(hd):
@@ -75,11 +81,12 @@ class TeamsApp(HydraHeadApp):
                 teams = self.supabase_client.table("team").select("*").or_(filter_string).execute()
             
             team_names = [team["team_name"] for team in teams.data]
+            team_names.sort()
 
             col1, col2 = st.columns([2, 1])
 
             with col1:
-                selcol = st.columns(2)
+                selcol = st.columns(3)
                 with selcol[0]:
                     selected_team_name = st.selectbox("Select Team", options=team_names, key="team_name",
                                                         index=0 if team_names else None)
@@ -110,22 +117,79 @@ class TeamsApp(HydraHeadApp):
 
                         merged_df["position_id"] = merged_df["position_id"].map(position_map)
 
-                        st.subheader("Team Players")
-                        hd = hy.data_editor(merged_df, hide_index=True, num_rows="dynamic",
+                        st.subheader("Players")
+                        sorted_df = merged_df.sort_values(by="sur_name").reset_index(drop=True)
+                        hd = hy.data_editor(sorted_df, hide_index=True, num_rows="dynamic",
                                             column_config=change_column_config)
                     else:
                         st.info("No players found for this team.")
                 else:
                     st.warning("No team selected.")
+                
+                with selcol[1]:
+                    coaches = self.supabase_client.table("team").select("coach_id", "assistant_coach1_id", "assistant_coach2_id", "assistant_coach3_id", "assistant_coach4_id", "assistant_coach5_id").eq("id", selected_team["id"]).execute().data
+                    hy.write(f"Coaches:")
+                    for coach in coaches:
+                        for key, value in coach.items():
+                            if value is not None:
+                                coach_name = self.supabase_client.table("user").select("first_name", "sur_name").eq("id", value).execute().data[0]
+                                hy.write(f"{coach_name['first_name']} {coach_name['sur_name']}, ")
+                
+                with selcol[2]:
+                    # Format team data for insights
+                    team_data = {
+                        'team_name': selected_team_name,
+                        'player_count': len(hd),
+                        'average_scores': {
+                            'passing': stat.mean(hd['passing']),
+                            'catching': stat.mean(hd['catching']),
+                            'tackling': stat.mean(hd['tackling']),
+                            'kicking': stat.mean(hd['kicking']),
+                            'rucking': stat.mean(hd['rucking']),
+                            'scrummaging': stat.mean(hd['scrummaging']),
+                            'attack': stat.mean(hd['attack']),
+                            'defence': stat.mean(hd['defence']),
+                            'positional_awareness': stat.mean(hd['positional_awareness']),
+                            'confidence': stat.mean(hd['confidence'])
+                        },
+                        'players': [
+                            {
+                                'name': f"{row['first_name']} {row['sur_name']}",
+                                'position': row['position_id'],
+                                'scores': {
+                                    'passing': row['passing'],
+                                    'catching': row['catching'],
+                                    'tackling': row['tackling'],
+                                    'kicking': row['kicking'],
+                                    'rucking': row['rucking'],
+                                    'scrummaging': row['scrummaging'],
+                                    'attack': row['attack'],
+                                    'defence': row['defence'],
+                                    'positional_awareness': row['positional_awareness'],
+                                    'confidence': row['confidence']
+                                }
+                            }
+                            for _, row in hd.iterrows()
+                        ]
+                    }
+                with selcol[2]:
+                    generate_insights = st.button("Generate Team Insights", key="generate_insights")
+                    if generate_insights:
+                        insights = get_insights(json.dumps(team_data), "team")
+                        if insights:
+                            team_insights_dialog(insights)
+                        else:
+                            hy.error("Failed to generate team insights")
+                                
 
-            with col2:
-                if selected_team and not team_players_df.empty:
-                    st.subheader("Team Performance")
-                    fig = create_team_radar(hd)
-                    if fig is not None:
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.error("Failed to create radar chart")
+                with col2:
+                    if selected_team and not team_players_df.empty:
+                        st.subheader("Team Stats")
+                        fig = create_team_radar(hd)
+                        if fig is not None:
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.error("Failed to create radar chart")
 
             cola, colb, _ = st.columns([1, 1, 8])
             with cola:
@@ -136,6 +200,7 @@ class TeamsApp(HydraHeadApp):
                 save = st.button("Save Changes", use_container_width=True)
                 if save:
                     save_changes("save_player", hd)
+
 
         except Exception as e:
             st.error(f"Error in teams app: {str(e)}")

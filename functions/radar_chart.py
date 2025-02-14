@@ -3,7 +3,7 @@ import pandas as pd
 
 def radar_chart(data, title):
     df = pd.DataFrame(data)
-    fig = px.line_polar(df, r='r', theta='theta', line_close=True, title=title)
+    fig = px.line_polar(df, r='r', theta='theta', line_close=True)
     
     # Add target line at value 5
     target_theta = df['theta'].tolist() + [df['theta'].iloc[0]]  # Add first point to end

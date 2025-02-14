@@ -20,7 +20,7 @@ def add_player_form():
         sur_name = hy.text_input("Surname", key="sur_name")
         email = hy.text_input("Email", key="email")
         team = hy.selectbox("Team", options=team_names, key="team", index=None)
-        position = hy.selectbox("Possition", options=positions, key="position", index=None)
+        position = hy.selectbox("Possition", options=positions, key="position", index=15)
         
 
         add_player_button: bool = hy.form_submit_button(label="Add Plyer")
