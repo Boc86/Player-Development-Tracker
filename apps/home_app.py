@@ -14,7 +14,7 @@ class HomeApp(HydraHeadApp):
         try:
             with hy.container():
 
-                st.markdown("<h1 style='text-align:left; color:white;'>Welcome to KRFC Player Development Tracker</h1>", unsafe_allow_html=True)
+                st.markdown("<h1 style='text-align:left; color:white;'>Welcome to the KRFC Player Development Tracker</h1>", unsafe_allow_html=True)
                 st.markdown("<p style='text-align:left;'>Your central hub for managing player development and team performance.</p>", unsafe_allow_html=True)
 
                 col1, col2 = hy.columns([3,5])
